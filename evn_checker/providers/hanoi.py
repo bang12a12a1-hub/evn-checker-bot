@@ -76,7 +76,8 @@ class HanoiProvider(BaseEVNProvider):
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
                 page = browser.new_page()
-                page.goto("https://cskh.evnhanoi.com.vn/TraCuu/HoaDonTienDien", timeout=15000)
+                page.goto("https://evnhanoi.vn/tra-cuu/hoa-don-tien-dien", timeout=15000)
+
                 
                 if page.locator("#txtMaKh").is_visible(timeout=3000):
                     page.fill("#txtMaKh", customer_code)

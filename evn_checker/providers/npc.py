@@ -13,7 +13,8 @@ class NPCProvider(BaseEVNProvider):
         customer_code = customer_code.strip().upper()
         
         try:
-            url = "https://cskh.evnnpc.vn/TraCuu/GetTienDienByMaKh"
+            url = "https://cskh.npc.com.vn/TraCuu/GetTienDienByMaKh"
+
             params = {"maKh": customer_code}
             
             resp = requests.get(url, params=params, headers=self.headers, timeout=self.timeout)
@@ -74,7 +75,8 @@ class NPCProvider(BaseEVNProvider):
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
                 page = browser.new_page()
-                page.goto("https://cskh.evnnpc.vn/TraCuu/TraCuuTienDien", timeout=15000)
+                page.goto("https://cskh.npc.com.vn/TraCuu/TraCuuTienDien", timeout=15000)
+
                 
                 if page.locator("#txtMaKh").is_visible(timeout=3000):
                     page.fill("#txtMaKh", customer_code)
