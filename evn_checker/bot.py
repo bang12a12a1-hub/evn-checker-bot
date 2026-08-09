@@ -167,14 +167,13 @@ def main():
     parser.add_argument("token", nargs="?", help="Telegram Bot Token lấy từ @BotFather")
     args = parser.parse_args()
 
-    token = args.token or os.environ.get("TELEGRAM_BOT_TOKEN")
+    DEFAULT_TOKEN = "8972194053:AAFk83IeojjcLXxUBe_jFJuY04Lg24rsS-k"
+    token = args.token or os.environ.get("TELEGRAM_BOT_TOKEN") or DEFAULT_TOKEN
 
     if not token:
         print("❌ Thiếu Telegram Bot Token!")
-        print("Hướng dẫn chạy:")
-        print("  python -m evn_checker.bot <YOUR_TELEGRAM_BOT_TOKEN>")
-        print("Hoặc gán biến môi trường TELEGRAM_BOT_TOKEN")
         sys.exit(1)
+
 
     # Start dummy HTTP server in a daemon thread if PORT is defined (for Render Web Service)
     if "PORT" in os.environ:
