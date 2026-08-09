@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.log
+chrome_profile/
+user_data/
+mp3/
+.env
