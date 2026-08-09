@@ -2,7 +2,7 @@ import sys
 import os
 import json
 import argparse
-from typing import List
+from typing import List, Dict, Optional, Tuple
 
 # Fix UTF-8 encoding for Windows console
 if sys.stdout.encoding != 'utf-8':
@@ -29,27 +29,58 @@ def extract_customer_codes(text: str) -> List[str]:
             result.append(upper_m)
     return result
 
+
+def extract_codes_with_amounts(text: str) -> List[Tuple[str, Optional[float]]]:
+    """Extracts EVN customer codes with their accompanying amounts from raw text.
+    
+    Returns list of tuples: (code, amount_or_None)
+    Example input: "PB14090034040 539.633"
+    Returns: [("PB14090034040", 539633.0)]
+    """
+    # Pattern: EVN code followed optionally by a number (with dots, commas, spaces as thousands sep)
+    pattern = r'\b(P[A-Z0-9]{9,12})\b[\s,]*([0-9][0-9.,\s]*[0-9])?'
+    matches = re.findall(pattern, text, re.IGNORECASE)
+    
+    seen = set()
+    result = []
+    for code, amount_str in matches:
+        upper_code = code.upper()
+        if upper_code not in seen:
+            seen.add(upper_code)
+            if amount_str.strip():
+                # Parse amount: remove spaces, handle both dot and comma as thousands sep
+                clean = amount_str.strip().replace(' ', '').replace(',', '').replace('.', '')
+                try:
+                    amount = float(clean)
+                except ValueError:
+                    amount = None
+            else:
+                amount = None
+            result.append((upper_code, amount))
+    return result
+
+
 def print_result_pretty(result):
     dict_res = result.to_dict()
     print("=" * 60)
-    print(f"📌 MÃ KHÁCH HÀNG : {dict_res['customer_code']}")
-    print(f"🏢 KHU VỰC EVN   : {dict_res['region']}")
-    print(f"👤 KHÁCH HÀNG    : {dict_res['customer_name']}")
-    print(f"📍 ĐỊA CHỈ       : {dict_res['address']}")
+    print(f"MÃ KHÁCH HÀNG : {dict_res['customer_code']}")
+    print(f"KHU VỰC EVN   : {dict_res['region']}")
+    print(f"KHÁCH HÀNG    : {dict_res['customer_name']}")
+    print(f"ĐỊA CHỈ       : {dict_res['address']}")
     
     if not dict_res['success']:
-        print(f"❌ THẤT BẠI      : {dict_res['error']}")
+        print(f"THẤT BẠI      : {dict_res['error']}")
     elif dict_res['is_paid']:
-        print(f"✅ TRẠNG THÁI    : ĐÃ THANH TOÁN (Hóa đơn không nợ tiền)")
+        print(f"TRẠNG THÁI    : ĐÃ THANH TOÁN (Hóa đơn không nợ tiền)")
     else:
-        print(f"⚠️  TRẠNG THÁI    : CHƯA THANH TOÁN")
-        print(f"💰 TỔNG TIỀN NỢ   : {dict_res['total_debt_formatted']}")
+        print(f"TRẠNG THÁI    : CHƯA THANH TOÁN")
+        print(f"TỔNG TIỀN NỢ   : {dict_res['total_debt_formatted']}")
         if dict_res['bills']:
-            print("📋 CHI TIẾT HÓA ĐƠN NỢ:")
+            print("CHI TIẾT HÓA ĐƠN NỢ:")
             for b in dict_res['bills']:
                 print(f"   - Kỳ: {b['period']} | Số tiền: {b['amount_formatted']} | Hạn TT: {b['due_date'] or 'N/A'}")
     
-    print(f"💬 THÔNG BÁO     : {dict_res['raw_message']}")
+    print(f"THÔNG BÁO     : {dict_res['raw_message']}")
     print("=" * 60)
 
 def main():
@@ -70,10 +101,10 @@ def main():
     codes_to_check = extract_customer_codes(raw_input_text)
 
     if not codes_to_check:
-        print("💡 Hướng dẫn sử dụng CLI:")
-        print("  Dán trực tiếp văn bản có mã KH vào dòng lệnh:")
+        print("Huong dan su dung CLI:")
+        print("  Dan truc tiep van ban co ma KH vao dong lenh:")
         print('  python -m evn_checker.cli "PC01BB0290022  1,530,403  PC01BB0308544  1,536,207"')
-        print("  Hoặc đọc từ file text:")
+        print("  Hoac doc tu file text:")
         print("  python -m evn_checker.cli -f input.txt")
         sys.exit(0)
 

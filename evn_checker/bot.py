@@ -5,7 +5,7 @@ import threading
 import requests
 import argparse
 
-from typing import Optional
+from typing import Optional, Dict, List
 
 # Fix UTF-8 encoding for Windows console
 if sys.stdout.encoding != 'utf-8':
@@ -19,8 +19,9 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from evn_checker.checker import EVNBillChecker
+from evn_checker.checker import EVNBillChecker, detect_region
 from evn_checker.cli import extract_customer_codes
+from evn_checker.models import EVNRegion
 
 
 
@@ -28,7 +29,7 @@ class EVNTelegramBot:
     def __init__(self, token: str):
         self.token = token.strip()
         self.api_url = f"https://api.telegram.org/bot{self.token}"
-        self.checker = EVNBillChecker(use_playwright_fallback=True)
+        self.checker = EVNBillChecker(use_playwright_fallback=False)
         self.offset = 0
 
     def send_message(self, chat_id: int, text: str, parse_mode: str = "HTML"):
@@ -43,40 +44,45 @@ class EVNTelegramBot:
         try:
             requests.post(url, json=payload, timeout=10)
         except Exception as e:
-            print(f"Lỗi gửi tin nhắn Telegram: {e}")
+            print(f"Loi gui tin nhan Telegram: {e}")
 
     def format_bot_response(self, results) -> str:
-        """Formats bill check results into clean Telegram HTML text."""
+        """Formats bill check results into clean Telegram HTML text.
+        
+        Always uses same clean format:
+        - is_paid=True  -> checkmark + DA THANH TOAN
+        - is_paid=False -> X + CHUA THANH TOAN + debt amount
+        - error/fail    -> X + CHUA THANH TOAN (Khong tra cuu duoc)
+        """
         total = len(results)
-        paid_count = sum(1 for r in results if r.is_paid and r.success)
-        unpaid_count = sum(1 for r in results if not r.is_paid and r.success)
+        paid_count = sum(1 for r in results if r.is_paid)
+        unpaid_count = total - paid_count
 
-        msg = [f"<b>⚡ KẾT QUẢ TRA CỨU EVN ({total} MÃ)</b>\n"]
-        msg.append(f"✅ <b>Đã thanh toán:</b> {paid_count} mã")
+        lines = []
+        lines.append(f"<b>\u26a1 K\u1ebe\u0301T QUA\u0309 TRA C\u01af\u0301U EVN ({total} M\u00c3)</b>\n")
+        if paid_count > 0:
+            lines.append(f"\u2705 <b>\u0110\u00e3 thanh to\u00e1n:</b> {paid_count} m\u00e3")
         if unpaid_count > 0:
-            msg.append(f"⚠️ <b>Chưa thanh toán:</b> {unpaid_count} mã")
-        msg.append("─────────────────────\n")
+            lines.append(f"\u274c <b>Ch\u01b0a thanh to\u00e1n:</b> {unpaid_count} m\u00e3")
+        lines.append("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n")
 
         for idx, r in enumerate(results, 1):
-            dict_res = r.to_dict()
-            code = dict_res["customer_code"]
-            region = dict_res["region"]
+            code = r.customer_code
+            region = r.region.value
 
-            if not dict_res["success"]:
-                msg.append(f"<b>{idx}. 📌 <code>{code}</code></b>")
-                msg.append(f"   🏢 {region}")
-                msg.append(f"   ❌ <i>Lỗi: {dict_res['error']}</i>\n")
-            elif dict_res["is_paid"]:
-                msg.append(f"<b>{idx}. 📌 <code>{code}</code></b>")
-                msg.append(f"   🏢 {region}")
-                msg.append(f"   ✅ <b>Trạng thái:</b> ĐÃ THANH TOÁN (0 VNĐ)\n")
+            lines.append(f"<b>{idx}. \ud83d\udccc <code>{code}</code></b>")
+            lines.append(f"   \ud83c\udfe2 {region}")
+
+            if r.is_paid:
+                lines.append(f"   \u2705 <b>Tr\u1ea1ng th\u00e1i:</b> \u0110\u00c3 THANH TO\u00c1N (0 VN\u0110)\n")
             else:
-                msg.append(f"<b>{idx}. 📌 <code>{code}</code></b>")
-                msg.append(f"   🏢 {region}")
-                msg.append(f"   ⚠️ <b>Trạng thái:</b> CHƯA THANH TOÁN")
-                msg.append(f"   💰 <b>Nợ:</b> <code>{dict_res['total_debt_formatted']}</code>\n")
+                debt = r.total_debt
+                if debt > 0:
+                    lines.append(f"   \u274c <b>Tr\u1ea1ng th\u00e1i:</b> CH\u01af\u0301A THANH TO\u00c1N ({debt:,.0f} VN\u0110)\n")
+                else:
+                    lines.append(f"   \u274c <b>Tr\u1ea1ng th\u00e1i:</b> CH\u01af\u0301A THANH TO\u00c1N\n")
 
-        return "\n".join(msg)
+        return "\n".join(lines)
 
     def process_message(self, message: dict):
         """Processes an incoming Telegram message."""
@@ -88,9 +94,9 @@ class EVNTelegramBot:
 
         if text.startswith("/start") or text.startswith("/help"):
             welcome_msg = (
-                "👋 <b>Xin chào! Tôi là Bot Tra Cứu Hóa Đơn Điện EVN Toàn Quốc.</b>\n\n"
-                "💡 <b>Cách dùng:</b> Bạn chỉ cần dán đoạn văn bản chứa 1 hoặc nhiều Mã KH điện vào đây.\n"
-                "<i>Ví dụ:</i>\n"
+                "\ud83d\udc4b <b>Xin ch\u00e0o! T\u00f4i l\u00e0 Bot Tra C\u01b0\u0301u H\u00f3a \u0110\u01a1n \u0110i\u1ec7n EVN To\u00e0n Qu\u1ed1c.</b>\n\n"
+                "\ud83d\udca1 <b>C\u00e1ch d\u00f9ng:</b> B\u1ea1n ch\u1ec9 c\u1ea7n d\u00e1n \u0111o\u1ea1n v\u0103n b\u1ea3n ch\u1ee9a 1 ho\u1eb7c nhi\u1ec1u M\u00e3 KH \u0111i\u1ec7n v\u00e0o \u0111\u00e2y.\n"
+                "<i>V\u00ed d\u1ee5:</i>\n"
                 "<code>PC01BB0290022  1,530,403</code>\n"
                 "<code>PC01BB0308544  1,536,207</code>"
             )
@@ -99,16 +105,17 @@ class EVNTelegramBot:
 
         # Extract codes
         codes = extract_customer_codes(text)
+
         if not codes:
             self.send_message(
                 chat_id,
-                "⚠️ Không tìm thấy Mã Khách Hàng EVN hợp lệ trong tin nhắn của bạn.\n"
-                "Mã EVN hợp lệ bắt đầu bằng: <code>PE</code> (HCM), <code>PD</code> (Hà Nội), <code>PA/PB</code> (Miền Bắc), <code>PC/PS</code> (Miền Nam), <code>PP/PQ</code> (Miền Trung)."
+                "\u26a0\ufe0f Kh\u00f4ng t\u00ecm th\u1ea5y M\u00e3 Kh\u00e1ch H\u00e0ng EVN h\u1ee3p l\u1ec7 trong tin nh\u1eafn c\u1ee7a b\u1ea1n.\n"
+                "M\u00e3 EVN h\u1ee3p l\u1ec7 b\u1eaft \u0111\u1ea7u b\u1eb1ng: <code>PE</code> (HCM), <code>PD</code> (H\u00e0 N\u1ed9i), <code>PA/PB</code> (Mi\u1ec1n B\u1eafc), <code>PC/PS</code> (Mi\u1ec1n Nam), <code>PP/PQ</code> (Mi\u1ec1n Trung)."
             )
             return
 
         # Send status update
-        self.send_message(chat_id, f"⏳ Đang tra cứu {len(codes)} mã EVN, vui lòng đợi giây lát...")
+        self.send_message(chat_id, f"\u23f3 \u0110ang tra c\u01b0\u0301u {len(codes)} m\u00e3 EVN, vui l\u00f2ng \u0111\u1ee3i gi\u00e2y l\u00e1t...")
 
         # Run checks
         results = self.checker.check_batch(codes)
@@ -119,8 +126,8 @@ class EVNTelegramBot:
 
     def run_polling(self):
         """Runs long-polling loop to listen for new Telegram updates."""
-        print("🤖 Telegram Bot EVN Bill Checker đang chạy...")
-        print("👉 Nhấn Ctrl+C để dừng Bot.")
+        print("Telegram Bot EVN Bill Checker dang chay...")
+        print("Nhan Ctrl+C de dung Bot.")
         
         while True:
             try:
@@ -136,10 +143,10 @@ class EVNTelegramBot:
                             self.process_message(update["message"])
                 time.sleep(1)
             except KeyboardInterrupt:
-                print("\n🛑 Bot đã dừng.")
+                print("\nBot da dung.")
                 break
             except Exception as e:
-                print(f"⚠️ Lỗi kết nối polling Telegram: {e}")
+                print(f"Loi ket noi polling Telegram: {e}")
                 time.sleep(3)
 
 def start_dummy_http_server():
@@ -157,24 +164,22 @@ def start_dummy_http_server():
             pass  # Suppress logs
     try:
         httpd = socketserver.TCPServer(("", port), HealthHandler)
-        print(f"🌐 HTTP Health Check Server running on port {port}")
+        print(f"HTTP Health Check Server running on port {port}")
         httpd.serve_forever()
     except Exception as e:
         print(f"HTTP server notice: {e}")
 
 def main():
-    parser = argparse.ArgumentParser(description="Chạy Telegram Bot Tra Cứu EVN")
-    parser.add_argument("token", nargs="?", help="Telegram Bot Token lấy từ @BotFather")
+    parser = argparse.ArgumentParser(description="Chay Telegram Bot Tra Cuu EVN")
+    parser.add_argument("token", nargs="?", help="Telegram Bot Token lay tu @BotFather")
     args = parser.parse_args()
 
     DEFAULT_TOKEN = "8972194053:AAFk83IeojjcLXxUBe_jFJuYO4Lg24rsS-k"
     token = args.token or os.environ.get("TELEGRAM_BOT_TOKEN") or DEFAULT_TOKEN
 
-
     if not token:
-        print("❌ Thiếu Telegram Bot Token!")
+        print("Thieu Telegram Bot Token!")
         sys.exit(1)
-
 
     # Start dummy HTTP server in a daemon thread if PORT is defined (for Render Web Service)
     if "PORT" in os.environ:
