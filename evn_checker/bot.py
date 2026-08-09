@@ -1,8 +1,10 @@
 import os
 import sys
 import time
+import threading
 import requests
 import argparse
+
 from typing import Optional
 
 # Fix UTF-8 encoding for Windows console
@@ -140,6 +142,26 @@ class EVNTelegramBot:
                 print(f"⚠️ Lỗi kết nối polling Telegram: {e}")
                 time.sleep(3)
 
+def start_dummy_http_server():
+    """Starts a minimal HTTP server so Render Web Service health checks pass."""
+    import http.server
+    import socketserver
+    port = int(os.environ.get("PORT", 8080))
+    class HealthHandler(http.server.SimpleHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"EVN Bot is running!")
+        def log_message(self, format, *args):
+            pass  # Suppress logs
+    try:
+        httpd = socketserver.TCPServer(("", port), HealthHandler)
+        print(f"🌐 HTTP Health Check Server running on port {port}")
+        httpd.serve_forever()
+    except Exception as e:
+        print(f"HTTP server notice: {e}")
+
 def main():
     parser = argparse.ArgumentParser(description="Chạy Telegram Bot Tra Cứu EVN")
     parser.add_argument("token", nargs="?", help="Telegram Bot Token lấy từ @BotFather")
@@ -154,8 +176,14 @@ def main():
         print("Hoặc gán biến môi trường TELEGRAM_BOT_TOKEN")
         sys.exit(1)
 
+    # Start dummy HTTP server in a daemon thread if PORT is defined (for Render Web Service)
+    if "PORT" in os.environ:
+        t = threading.Thread(target=start_dummy_http_server, daemon=True)
+        t.start()
+
     bot = EVNTelegramBot(token)
     bot.run_polling()
+
 
 if __name__ == "__main__":
     main()
