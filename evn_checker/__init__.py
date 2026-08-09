@@ -1,6 +1,10 @@
 from .models import BillCheckResult, BillItem, EVNRegion
 from .checker import EVNBillChecker, detect_region
-from .gui import launch_gui
+
+try:
+    from .gui import launch_gui
+except (ImportError, ModuleNotFoundError):
+    launch_gui = None
 
 __version__ = "1.0.0"
 __all__ = [
@@ -11,6 +15,7 @@ __all__ = [
     "BillItem",
     "EVNRegion"
 ]
+
 
 
 

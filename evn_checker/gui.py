@@ -1,8 +1,13 @@
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+try:
+    import tkinter as tk
+    from tkinter import ttk, messagebox, filedialog
+except (ImportError, ModuleNotFoundError):
+    tk = None
+
 import threading
 import sys
 import os
+
 
 # Fix UTF-8 for Windows console
 if sys.stdout.encoding != 'utf-8':
