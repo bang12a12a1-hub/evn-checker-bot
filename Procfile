@@ -1,1 +1,1 @@
-worker: python -u evn_checker/bot.py %TELEGRAM_BOT_TOKEN%
+web: python -u evn_checker/bot.py
