@@ -167,8 +167,9 @@ def main():
     parser.add_argument("token", nargs="?", help="Telegram Bot Token lấy từ @BotFather")
     args = parser.parse_args()
 
-    DEFAULT_TOKEN = "8972194053:AAFk83IeojjcLXxUBe_jFJuY04Lg24rsS-k"
+    DEFAULT_TOKEN = "8972194053:AAFk83IeojjcLXxUBe_jFJuYO4Lg24rsS-k"
     token = args.token or os.environ.get("TELEGRAM_BOT_TOKEN") or DEFAULT_TOKEN
+
 
     if not token:
         print("❌ Thiếu Telegram Bot Token!")
